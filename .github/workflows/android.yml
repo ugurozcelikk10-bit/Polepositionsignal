@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -16,23 +16,35 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: "temurin"
+          java-version: "17"
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0'
+          flutter-version: "stable"
           cache: true
+
+      # ANDROID KLASÖRÜ YOKSA OTOMATİK ÜRET
+      - name: Ensure Android project exists
+        run: |
+          if [ ! -d "android" ]; then
+            echo "android/ yok. Flutter create ile oluşturuyorum..."
+            flutter create --platforms=android --org com.polepositionsignal.app --project-name polepositionsignal temp_app
+            cp -r temp_app/android ./android
+            rm -rf temp_app
+          else
+            echo "android/ var, geçiyorum."
+          fi
 
       - name: Flutter pub get
         run: flutter pub get
 
-      - name: Build release APK
+      - name: Build Release APK
         run: flutter build apk --release
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-apk
+          name: polepositionsignal-apk
           path: build/app/outputs/flutter-apk/app-release.apk
