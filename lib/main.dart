@@ -1,19 +1,19 @@
-import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
-  runApp(const PoleApp());
+  runApp(const PolePositionSignalApp());
 }
 
-class PoleApp extends StatelessWidget {
-  const PoleApp({super.key});
+class PolePositionSignalApp extends StatelessWidget {
+  const PolePositionSignalApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Polepositionsignal',
-      theme: ThemeData(useMaterial3: true),
+      theme: ThemeData.dark(useMaterial3: true),
       home: const HomeShell(),
       debugShowCheckedModeBanner: false,
     );
@@ -30,364 +30,290 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int index = 0;
 
+  final settings = ScanSettings();
+
   @override
   Widget build(BuildContext context) {
     final pages = [
-      const SettingsPage(),
-      const ResultsPage(),
+      SettingsPage(settings: settings),
+      ResultsPage(settings: settings),
     ];
+
     return Scaffold(
+      appBar: AppBar(
+        title: Text(index == 0 ? "Ayarlar" : "Sonuçlar"),
+      ),
       body: pages[index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: (i) => setState(() => index = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.tune), label: 'Ayarlar'),
-          NavigationDestination(icon: Icon(Icons.list_alt), label: 'Sonuçlar'),
+          NavigationDestination(icon: Icon(Icons.tune), label: "Ayarlar"),
+          NavigationDestination(icon: Icon(Icons.radar), label: "Sonuçlar"),
         ],
       ),
     );
   }
 }
 
-class BotSettings {
-  double long4hMin;
-  double long4hMax;
-  double long1hMin;
-  double long1hMax;
+class ScanSettings {
+  // Daha sonra VPS/PC’de çalışan python scanner’a bağlanacağımız endpoint
+  String apiBaseUrl = "http://YOUR_SERVER_IP:8000";
 
-  double short4hMin;
-  double short4hMax;
-  double short1hMin;
-  double short1hMax;
+  // Ratio pencereleri — senin mantık:
+  // 4H: 1.0000 - 1.002
+  double long4hMin = 1.0000, long4hMax = 1.0020;
+  double short4hMin = 1.0000, short4hMax = 1.0020;
 
-  double m15_7_25_Min;
-  double m15_7_25_Max;
+  // 1H: 1.0000 - 1.005
+  double long1hMin = 1.0000, long1hMax = 1.0050;
+  double short1hMin = 1.0000, short1hMax = 1.0050;
 
-  double m15_25_7_Min;
-  double m15_25_7_Max;
+  // 15m (EMA7/25 & EMA25/7): 1.0000 - 1.02
+  double long15m25Min = 1.0000, long15m25Max = 1.0200;
+  double short15m25Min = 1.0000, short15m25Max = 1.0200;
 
-  double m15_7_45_Min;
-  double m15_7_45_Max;
+  // 15m (EMA7/45 & EMA45/7): 1.0000 - 1.03
+  double long15m45Min = 1.0000, long15m45Max = 1.0300;
+  double short15m45Min = 1.0000, short15m45Max = 1.0300;
 
-  double m15_45_7_Min;
-  double m15_45_7_Max;
-
-  int topN;
-  int orderbookN;
-  int topLevels;
-
-  BotSettings({
-    required this.long4hMin,
-    required this.long4hMax,
-    required this.long1hMin,
-    required this.long1hMax,
-    required this.short4hMin,
-    required this.short4hMax,
-    required this.short1hMin,
-    required this.short1hMax,
-    required this.m15_7_25_Min,
-    required this.m15_7_25_Max,
-    required this.m15_25_7_Min,
-    required this.m15_25_7_Max,
-    required this.m15_7_45_Min,
-    required this.m15_7_45_Max,
-    required this.m15_45_7_Min,
-    required this.m15_45_7_Max,
-    required this.topN,
-    required this.orderbookN,
-    required this.topLevels,
-  });
-
-  static BotSettings defaults() => BotSettings(
-        // Senin mantık: 4H en sıkı, 1H orta, 15m daha geniş, 45 daha geniş
-        long4hMin: 1.0000, long4hMax: 1.0020,
-        long1hMin: 1.0000, long1hMax: 1.0050,
-        short4hMin: 1.0000, short4hMax: 1.0020,
-        short1hMin: 1.0000, short1hMax: 1.0050,
-
-        // 15m pencereleri (sen oynayacaksın)
-        m15_7_25_Min: 1.0000, m15_7_25_Max: 1.0200, // EMA7/25 long tarafı
-        m15_25_7_Min: 1.0000, m15_25_7_Max: 1.0200, // EMA25/7 short tarafı
-
-        m15_7_45_Min: 1.0000, m15_7_45_Max: 1.0300, // EMA7/45
-        m15_45_7_Min: 1.0000, m15_45_7_Max: 1.0300, // EMA45/7
-
-        topN: 50,
-        orderbookN: 50,
-        topLevels: 3,
-      );
-
-  Map<String, dynamic> toMap() => {
-        'long4hMin': long4hMin,
-        'long4hMax': long4hMax,
-        'long1hMin': long1hMin,
-        'long1hMax': long1hMax,
-        'short4hMin': short4hMin,
-        'short4hMax': short4hMax,
-        'short1hMin': short1hMin,
-        'short1hMax': short1hMax,
-        'm15_7_25_Min': m15_7_25_Min,
-        'm15_7_25_Max': m15_7_25_Max,
-        'm15_25_7_Min': m15_25_7_Min,
-        'm15_25_7_Max': m15_25_7_Max,
-        'm15_7_45_Min': m15_7_45_Min,
-        'm15_7_45_Max': m15_7_45_Max,
-        'm15_45_7_Min': m15_45_7_Min,
-        'm15_45_7_Max': m15_45_7_Max,
-        'topN': topN,
-        'orderbookN': orderbookN,
-        'topLevels': topLevels,
-      };
-
-  static BotSettings fromPrefs(SharedPreferences p) {
-    final d = BotSettings.defaults();
-    double gD(String k, double def) => p.getDouble(k) ?? def;
-    int gI(String k, int def) => p.getInt(k) ?? def;
-
-    return BotSettings(
-      long4hMin: gD('long4hMin', d.long4hMin),
-      long4hMax: gD('long4hMax', d.long4hMax),
-      long1hMin: gD('long1hMin', d.long1hMin),
-      long1hMax: gD('long1hMax', d.long1hMax),
-      short4hMin: gD('short4hMin', d.short4hMin),
-      short4hMax: gD('short4hMax', d.short4hMax),
-      short1hMin: gD('short1hMin', d.short1hMin),
-      short1hMax: gD('short1hMax', d.short1hMax),
-      m15_7_25_Min: gD('m15_7_25_Min', d.m15_7_25_Min),
-      m15_7_25_Max: gD('m15_7_25_Max', d.m15_7_25_Max),
-      m15_25_7_Min: gD('m15_25_7_Min', d.m15_25_7_Min),
-      m15_25_7_Max: gD('m15_25_7_Max', d.m15_25_7_Max),
-      m15_7_45_Min: gD('m15_7_45_Min', d.m15_7_45_Min),
-      m15_7_45_Max: gD('m15_7_45_Max', d.m15_7_45_Max),
-      m15_45_7_Min: gD('m15_45_7_Min', d.m15_45_7_Min),
-      m15_45_7_Max: gD('m15_45_7_Max', d.m15_45_7_Max),
-      topN: gI('topN', d.topN),
-      orderbookN: gI('orderbookN', d.orderbookN),
-      topLevels: gI('topLevels', d.topLevels),
-    );
-  }
-
-  static Future<void> saveToPrefs(BotSettings s) async {
-    final p = await SharedPreferences.getInstance();
-    Future<void> sD(String k, double v) async => p.setDouble(k, v);
-    Future<void> sI(String k, int v) async => p.setInt(k, v);
-
-    await sD('long4hMin', s.long4hMin);
-    await sD('long4hMax', s.long4hMax);
-    await sD('long1hMin', s.long1hMin);
-    await sD('long1hMax', s.long1hMax);
-    await sD('short4hMin', s.short4hMin);
-    await sD('short4hMax', s.short4hMax);
-    await sD('short1hMin', s.short1hMin);
-    await sD('short1hMax', s.short1hMax);
-
-    await sD('m15_7_25_Min', s.m15_7_25_Min);
-    await sD('m15_7_25_Max', s.m15_7_25_Max);
-    await sD('m15_25_7_Min', s.m15_25_7_Min);
-    await sD('m15_25_7_Max', s.m15_25_7_Max);
-
-    await sD('m15_7_45_Min', s.m15_7_45_Min);
-    await sD('m15_7_45_Max', s.m15_7_45_Max);
-    await sD('m15_45_7_Min', s.m15_45_7_Min);
-    await sD('m15_45_7_Max', s.m15_45_7_Max);
-
-    await sI('topN', s.topN);
-    await sI('orderbookN', s.orderbookN);
-    await sI('topLevels', s.topLevels);
-  }
+  int topN = 50;
+  int orderbookDepth = 200;
 }
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  final ScanSettings settings;
+  const SettingsPage({super.key, required this.settings});
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  BotSettings s = BotSettings.defaults();
-  bool loaded = false;
+  late final TextEditingController apiCtrl;
+  late final TextEditingController topNCtrl;
+  late final TextEditingController depthCtrl;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    apiCtrl = TextEditingController(text: widget.settings.apiBaseUrl);
+    topNCtrl = TextEditingController(text: widget.settings.topN.toString());
+    depthCtrl = TextEditingController(text: widget.settings.orderbookDepth.toString());
   }
 
-  Future<void> _load() async {
-    final p = await SharedPreferences.getInstance();
+  @override
+  void dispose() {
+    apiCtrl.dispose();
+    topNCtrl.dispose();
+    depthCtrl.dispose();
+    super.dispose();
+  }
+
+  void save() {
     setState(() {
-      s = BotSettings.fromPrefs(p);
-      loaded = true;
+      widget.settings.apiBaseUrl = apiCtrl.text.trim();
+      widget.settings.topN = int.tryParse(topNCtrl.text.trim()) ?? widget.settings.topN;
+      widget.settings.orderbookDepth =
+          int.tryParse(depthCtrl.text.trim()) ?? widget.settings.orderbookDepth;
     });
-  }
 
-  Future<void> _save() async {
-    await BotSettings.saveToPrefs(s);
-    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Kaydedildi ✅')),
-    );
-  }
-
-  Widget _ratioRow(String title, double minV, double maxV, void Function(double) setMin,
-      void Function(double) setMax) {
-    String fmt(double v) => v.toStringAsFixed(6);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    initialValue: fmt(minV),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'MIN'),
-                    onChanged: (v) => setMin(double.tryParse(v) ?? minV),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: fmt(maxV),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'MAX'),
-                    onChanged: (v) => setMax(double.tryParse(v) ?? maxV),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+      const SnackBar(content: Text("Kaydedildi ✅")),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!loaded) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
+    final s = widget.settings;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text(
+          "Polepositionsignal • Radar Ayarları",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 12),
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Ayarlar')),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  Row(children: [
-                    const Expanded(child: Text('TOP N')),
-                    SizedBox(
-                      width: 90,
-                      child: TextFormField(
-                        initialValue: s.topN.toString(),
-                        keyboardType: TextInputType.number,
-                        onChanged: (v) => setState(() => s.topN = int.tryParse(v) ?? s.topN),
-                      ),
-                    ),
-                  ]),
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    const Expanded(child: Text('ORDERBOOK (kaç kademe)')),
-                    SizedBox(
-                      width: 90,
-                      child: TextFormField(
-                        initialValue: s.orderbookN.toString(),
-                        keyboardType: TextInputType.number,
-                        onChanged: (v) =>
-                            setState(() => s.orderbookN = int.tryParse(v) ?? s.orderbookN),
-                      ),
-                    ),
-                  ]),
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    const Expanded(child: Text('Top Level sayısı (3)')),
-                    SizedBox(
-                      width: 90,
-                      child: TextFormField(
-                        initialValue: s.topLevels.toString(),
-                        keyboardType: TextInputType.number,
-                        onChanged: (v) =>
-                            setState(() => s.topLevels = int.tryParse(v) ?? s.topLevels),
-                      ),
-                    ),
-                  ]),
-                ],
+        TextField(
+          controller: apiCtrl,
+          decoration: const InputDecoration(
+            labelText: "API Base URL (scanner sunucusu)",
+            hintText: "http://1.2.3.4:8000",
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: topNCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: "TOP_N",
+                  border: OutlineInputBorder(),
+                ),
               ),
             ),
-          ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: depthCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: "Orderbook depth (örn 200)",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+          ],
+        ),
 
-          _ratioRow('4H LONG gate (EMA7/25)',
-              s.long4hMin, s.long4hMax,
-              (v) => setState(() => s.long4hMin = v),
-              (v) => setState(() => s.long4hMax = v),
-          ),
-          _ratioRow('4H SHORT gate (EMA25/7)',
-              s.short4hMin, s.short4hMax,
-              (v) => setState(() => s.short4hMin = v),
-              (v) => setState(() => s.short4hMax = v),
-          ),
-          _ratioRow('1H LONG gate (EMA7/25)',
-              s.long1hMin, s.long1hMax,
-              (v) => setState(() => s.long1hMin = v),
-              (v) => setState(() => s.long1hMax = v),
-          ),
-          _ratioRow('1H SHORT gate (EMA25/7)',
-              s.short1hMin, s.short1hMax,
-              (v) => setState(() => s.short1hMin = v),
-              (v) => setState(() => s.short1hMax = v),
-          ),
+        const SizedBox(height: 16),
+        const Divider(),
+        const SizedBox(height: 10),
 
-          _ratioRow('15m LONG radar (EMA7/25)',
-              s.m15_7_25_Min, s.m15_7_25_Max,
-              (v) => setState(() => s.m15_7_25_Min = v),
-              (v) => setState(() => s.m15_7_25_Max = v),
-          ),
-          _ratioRow('15m SHORT radar (EMA25/7)',
-              s.m15_25_7_Min, s.m15_25_7_Max,
-              (v) => setState(() => s.m15_25_7_Min = v),
-              (v) => setState(() => s.m15_25_7_Max = v),
-          ),
+        const Text("Ratio Pencereleri (min/max)", style: TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 8),
 
-          _ratioRow('15m ekstra (EMA7/45)',
-              s.m15_7_45_Min, s.m15_7_45_Max,
-              (v) => setState(() => s.m15_7_45_Min = v),
-              (v) => setState(() => s.m15_7_45_Max = v),
-          ),
-          _ratioRow('15m ekstra (EMA45/7)',
-              s.m15_45_7_Min, s.m15_45_7_Max,
-              (v) => setState(() => s.m15_45_7_Min = v),
-              (v) => setState(() => s.m15_45_7_Max = v),
-          ),
+        RatioCard(
+          title: "4H Gate",
+          items: [
+            RatioItem("LONG EMA7/25", s.long4hMin, s.long4hMax, (a, b) {
+              s.long4hMin = a; s.long4hMax = b;
+            }),
+            RatioItem("SHORT EMA25/7", s.short4hMin, s.short4hMax, (a, b) {
+              s.short4hMin = a; s.short4hMax = b;
+            }),
+          ],
+          onChanged: () => setState(() {}),
+        ),
 
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: _save,
-            icon: const Icon(Icons.save),
-            label: const Text('Kaydet'),
+        RatioCard(
+          title: "1H Gate",
+          items: [
+            RatioItem("LONG EMA7/25", s.long1hMin, s.long1hMax, (a, b) {
+              s.long1hMin = a; s.long1hMax = b;
+            }),
+            RatioItem("SHORT EMA25/7", s.short1hMin, s.short1hMax, (a, b) {
+              s.short1hMin = a; s.short1hMax = b;
+            }),
+          ],
+          onChanged: () => setState(() {}),
+        ),
+
+        RatioCard(
+          title: "15m Entry (EMA25 ve EMA45)",
+          items: [
+            RatioItem("LONG EMA7/25", s.long15m25Min, s.long15m25Max, (a, b) {
+              s.long15m25Min = a; s.long15m25Max = b;
+            }),
+            RatioItem("SHORT EMA25/7", s.short15m25Min, s.short15m25Max, (a, b) {
+              s.short15m25Min = a; s.short15m25Max = b;
+            }),
+            RatioItem("LONG EMA7/45", s.long15m45Min, s.long15m45Max, (a, b) {
+              s.long15m45Min = a; s.long15m45Max = b;
+            }),
+            RatioItem("SHORT EMA45/7", s.short15m45Min, s.short15m45Max, (a, b) {
+              s.short15m45Min = a; s.short15m45Max = b;
+            }),
+          ],
+          onChanged: () => setState(() {}),
+        ),
+
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          onPressed: save,
+          icon: const Icon(Icons.save),
+          label: const Text("Kaydet"),
+        ),
+        const SizedBox(height: 10),
+        const Text(
+          "Not: Şimdilik app sadece ayar tutar ve sonuç endpoint’inden veri çeker.\n"
+          "Scanner’ı VPS/PC’de çalıştırınca burada göreceğiz.",
+          style: TextStyle(color: Colors.white70),
+        )
+      ],
+    );
+  }
+}
+
+class RatioItem {
+  final String label;
+  double min;
+  double max;
+  final void Function(double min, double max) set;
+  RatioItem(this.label, this.min, this.max, this.set);
+}
+
+class RatioCard extends StatelessWidget {
+  final String title;
+  final List<RatioItem> items;
+  final VoidCallback onChanged;
+
+  const RatioCard({super.key, required this.title, required this.items, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            ...items.map((it) => _RatioRow(item: it, onChanged: onChanged)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RatioRow extends StatelessWidget {
+  final RatioItem item;
+  final VoidCallback onChanged;
+  const _RatioRow({required this.item, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final minCtrl = TextEditingController(text: item.min.toStringAsFixed(6));
+    final maxCtrl = TextEditingController(text: item.max.toStringAsFixed(6));
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(child: Text(item.label)),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 110,
+            child: TextField(
+              controller: minCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: "min"),
+              onSubmitted: (v) {
+                final nv = double.tryParse(v.trim());
+                if (nv != null) { item.set(nv, item.max); onChanged(); }
+              },
+            ),
           ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () async {
-              final d = BotSettings.defaults();
-              setState(() => s = d);
-              await BotSettings.saveToPrefs(d);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Varsayılanlara döndü')),
-              );
-            },
-            child: const Text('Varsayılanlara dön'),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 110,
+            child: TextField(
+              controller: maxCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: "max"),
+              onSubmitted: (v) {
+                final nv = double.tryParse(v.trim());
+                if (nv != null) { item.set(item.min, nv); onChanged(); }
+              },
+            ),
           ),
         ],
       ),
@@ -396,504 +322,150 @@ class _SettingsPageState extends State<SettingsPage> {
 }
 
 class ResultsPage extends StatefulWidget {
-  const ResultsPage({super.key});
+  final ScanSettings settings;
+  const ResultsPage({super.key, required this.settings});
 
   @override
   State<ResultsPage> createState() => _ResultsPageState();
 }
 
 class _ResultsPageState extends State<ResultsPage> {
-  final List<String> logs = [];
-  Timer? t;
+  bool loading = false;
+  String? error;
+  List<Map<String, dynamic>> results = [];
 
-  @override
-  void initState() {
-    super.initState();
-    // Şimdilik demo: sonuç akışı gibi gösteriyoruz.
-    // Sonraki adımda bunu senin python tarayıcıdan gelecek data ile besleyeceğiz.
-    t = Timer.periodic(const Duration(seconds: 3), (_) {
-      setState(() {
-        final now = DateTime.now().toIso8601String().substring(11, 19);
-        logs.insert(0, "[$now] Bekleniyor… (scanner bağlanınca burası dolacak)");
-        if (logs.length > 200) logs.removeLast();
-      });
-    });
-  }
+  Future<void> fetchResults() async {
+    setState(() { loading = true; error = null; });
 
-  @override
-  void dispose() {
-    t?.cancel();
-    super.dispose();
-  }
+    try {
+      final url = Uri.parse("${widget.settings.apiBaseUrl}/results");
+      final res = await http.get(url).timeout(const Duration(seconds: 8));
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sonuçlar'),
-import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+      if (res.statusCode != 200) {
+        throw Exception("HTTP ${res.statusCode}");
+      }
 
-void main() {
-  runApp(const PoleApp());
-}
-
-class PoleApp extends StatelessWidget {
-  const PoleApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Polepositionsignal',
-      theme: ThemeData(useMaterial3: true),
-      home: const HomeShell(),
-      debugShowCheckedModeBanner: false,
-    );
-  }
-}
-
-class HomeShell extends StatefulWidget {
-  const HomeShell({super.key});
-
-  @override
-  State<HomeShell> createState() => _HomeShellState();
-}
-
-class _HomeShellState extends State<HomeShell> {
-  int index = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    final pages = [
-      const SettingsPage(),
-      const ResultsPage(),
-    ];
-    return Scaffold(
-      body: pages[index],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
-        onDestinationSelected: (i) => setState(() => index = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.tune), label: 'Ayarlar'),
-          NavigationDestination(icon: Icon(Icons.list_alt), label: 'Sonuçlar'),
-        ],
-      ),
-    );
-  }
-}
-
-class BotSettings {
-  double long4hMin;
-  double long4hMax;
-  double long1hMin;
-  double long1hMax;
-
-  double short4hMin;
-  double short4hMax;
-  double short1hMin;
-  double short1hMax;
-
-  double m15_7_25_Min;
-  double m15_7_25_Max;
-
-  double m15_25_7_Min;
-  double m15_25_7_Max;
-
-  double m15_7_45_Min;
-  double m15_7_45_Max;
-
-  double m15_45_7_Min;
-  double m15_45_7_Max;
-
-  int topN;
-  int orderbookN;
-  int topLevels;
-
-  BotSettings({
-    required this.long4hMin,
-    required this.long4hMax,
-    required this.long1hMin,
-    required this.long1hMax,
-    required this.short4hMin,
-    required this.short4hMax,
-    required this.short1hMin,
-    required this.short1hMax,
-    required this.m15_7_25_Min,
-    required this.m15_7_25_Max,
-    required this.m15_25_7_Min,
-    required this.m15_25_7_Max,
-    required this.m15_7_45_Min,
-    required this.m15_7_45_Max,
-    required this.m15_45_7_Min,
-    required this.m15_45_7_Max,
-    required this.topN,
-    required this.orderbookN,
-    required this.topLevels,
-  });
-
-  static BotSettings defaults() => BotSettings(
-        // Senin mantık: 4H en sıkı, 1H orta, 15m daha geniş, 45 daha geniş
-        long4hMin: 1.0000, long4hMax: 1.0020,
-        long1hMin: 1.0000, long1hMax: 1.0050,
-        short4hMin: 1.0000, short4hMax: 1.0020,
-        short1hMin: 1.0000, short1hMax: 1.0050,
-
-        // 15m pencereleri (sen oynayacaksın)
-        m15_7_25_Min: 1.0000, m15_7_25_Max: 1.0200, // EMA7/25 long tarafı
-        m15_25_7_Min: 1.0000, m15_25_7_Max: 1.0200, // EMA25/7 short tarafı
-
-        m15_7_45_Min: 1.0000, m15_7_45_Max: 1.0300, // EMA7/45
-        m15_45_7_Min: 1.0000, m15_45_7_Max: 1.0300, // EMA45/7
-
-        topN: 50,
-        orderbookN: 50,
-        topLevels: 3,
-      );
-
-  Map<String, dynamic> toMap() => {
-        'long4hMin': long4hMin,
-        'long4hMax': long4hMax,
-        'long1hMin': long1hMin,
-        'long1hMax': long1hMax,
-        'short4hMin': short4hMin,
-        'short4hMax': short4hMax,
-        'short1hMin': short1hMin,
-        'short1hMax': short1hMax,
-        'm15_7_25_Min': m15_7_25_Min,
-        'm15_7_25_Max': m15_7_25_Max,
-        'm15_25_7_Min': m15_25_7_Min,
-        'm15_25_7_Max': m15_25_7_Max,
-        'm15_7_45_Min': m15_7_45_Min,
-        'm15_7_45_Max': m15_7_45_Max,
-        'm15_45_7_Min': m15_45_7_Min,
-        'm15_45_7_Max': m15_45_7_Max,
-        'topN': topN,
-        'orderbookN': orderbookN,
-        'topLevels': topLevels,
-      };
-
-  static BotSettings fromPrefs(SharedPreferences p) {
-    final d = BotSettings.defaults();
-    double gD(String k, double def) => p.getDouble(k) ?? def;
-    int gI(String k, int def) => p.getInt(k) ?? def;
-
-    return BotSettings(
-      long4hMin: gD('long4hMin', d.long4hMin),
-      long4hMax: gD('long4hMax', d.long4hMax),
-      long1hMin: gD('long1hMin', d.long1hMin),
-      long1hMax: gD('long1hMax', d.long1hMax),
-      short4hMin: gD('short4hMin', d.short4hMin),
-      short4hMax: gD('short4hMax', d.short4hMax),
-      short1hMin: gD('short1hMin', d.short1hMin),
-      short1hMax: gD('short1hMax', d.short1hMax),
-      m15_7_25_Min: gD('m15_7_25_Min', d.m15_7_25_Min),
-      m15_7_25_Max: gD('m15_7_25_Max', d.m15_7_25_Max),
-      m15_25_7_Min: gD('m15_25_7_Min', d.m15_25_7_Min),
-      m15_25_7_Max: gD('m15_25_7_Max', d.m15_25_7_Max),
-      m15_7_45_Min: gD('m15_7_45_Min', d.m15_7_45_Min),
-      m15_7_45_Max: gD('m15_7_45_Max', d.m15_7_45_Max),
-      m15_45_7_Min: gD('m15_45_7_Min', d.m15_45_7_Min),
-      m15_45_7_Max: gD('m15_45_7_Max', d.m15_45_7_Max),
-      topN: gI('topN', d.topN),
-      orderbookN: gI('orderbookN', d.orderbookN),
-      topLevels: gI('topLevels', d.topLevels),
-    );
-  }
-
-  static Future<void> saveToPrefs(BotSettings s) async {
-    final p = await SharedPreferences.getInstance();
-    Future<void> sD(String k, double v) async => p.setDouble(k, v);
-    Future<void> sI(String k, int v) async => p.setInt(k, v);
-
-    await sD('long4hMin', s.long4hMin);
-    await sD('long4hMax', s.long4hMax);
-    await sD('long1hMin', s.long1hMin);
-    await sD('long1hMax', s.long1hMax);
-    await sD('short4hMin', s.short4hMin);
-    await sD('short4hMax', s.short4hMax);
-    await sD('short1hMin', s.short1hMin);
-    await sD('short1hMax', s.short1hMax);
-
-    await sD('m15_7_25_Min', s.m15_7_25_Min);
-    await sD('m15_7_25_Max', s.m15_7_25_Max);
-    await sD('m15_25_7_Min', s.m15_25_7_Min);
-    await sD('m15_25_7_Max', s.m15_25_7_Max);
-
-    await sD('m15_7_45_Min', s.m15_7_45_Min);
-    await sD('m15_7_45_Max', s.m15_7_45_Max);
-    await sD('m15_45_7_Min', s.m15_45_7_Min);
-    await sD('m15_45_7_Max', s.m15_45_7_Max);
-
-    await sI('topN', s.topN);
-    await sI('orderbookN', s.orderbookN);
-    await sI('topLevels', s.topLevels);
-  }
-}
-
-class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
-
-  @override
-  State<SettingsPage> createState() => _SettingsPageState();
-}
-
-class _SettingsPageState extends State<SettingsPage> {
-  BotSettings s = BotSettings.defaults();
-  bool loaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final p = await SharedPreferences.getInstance();
-    setState(() {
-      s = BotSettings.fromPrefs(p);
-      loaded = true;
-    });
-  }
-
-  Future<void> _save() async {
-    await BotSettings.saveToPrefs(s);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Kaydedildi ✅')),
-    );
-  }
-
-  Widget _ratioRow(String title, double minV, double maxV, void Function(double) setMin,
-      void Function(double) setMax) {
-    String fmt(double v) => v.toStringAsFixed(6);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    initialValue: fmt(minV),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'MIN'),
-                    onChanged: (v) => setMin(double.tryParse(v) ?? minV),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: fmt(maxV),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'MAX'),
-                    onChanged: (v) => setMax(double.tryParse(v) ?? maxV),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!loaded) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      final decoded = jsonDecode(res.body);
+      if (decoded is List) {
+        results = decoded.cast<Map<String, dynamic>>();
+      } else {
+        throw Exception("JSON formatı List değil");
+      }
+    } catch (e) {
+      error = "Bağlantı yok / endpoint yok. Demo gösteriyorum.\n$e";
+      results = demoResults();
+    } finally {
+      setState(() { loading = false; });
     }
+  }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Ayarlar')),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  Row(children: [
-                    const Expanded(child: Text('TOP N')),
-                    SizedBox(
-                      width: 90,
-                      child: TextFormField(
-                        initialValue: s.topN.toString(),
-                        keyboardType: TextInputType.number,
-                        onChanged: (v) => setState(() => s.topN = int.tryParse(v) ?? s.topN),
-                      ),
-                    ),
-                  ]),
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    const Expanded(child: Text('ORDERBOOK (kaç kademe)')),
-                    SizedBox(
-                      width: 90,
-                      child: TextFormField(
-                        initialValue: s.orderbookN.toString(),
-                        keyboardType: TextInputType.number,
-                        onChanged: (v) =>
-                            setState(() => s.orderbookN = int.tryParse(v) ?? s.orderbookN),
-                      ),
-                    ),
-                  ]),
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    const Expanded(child: Text('Top Level sayısı (3)')),
-                    SizedBox(
-                      width: 90,
-                      child: TextFormField(
-                        initialValue: s.topLevels.toString(),
-                        keyboardType: TextInputType.number,
-                        onChanged: (v) =>
-                            setState(() => s.topLevels = int.tryParse(v) ?? s.topLevels),
-                      ),
-                    ),
-                  ]),
-                ],
+  List<Map<String, dynamic>> demoResults() {
+    return [
+      {
+        "side": "SHORT",
+        "symbol": "MOG-USDT-SWAP",
+        "tf": "15m",
+        "ratio_4h": 1.0185,
+        "ratio_1h": 1.0151,
+        "ratio_15m_25": 1.0050,
+        "ratio_15m_45": 1.0103,
+        "j": 24.3,
+        "k": 25.0,
+        "rsi_conf": "38.3→36.0 ↓",
+        "rsi_live": "36.0→36.0 →",
+        "support": "0.00000016 (x3.3)",
+        "resistance": "0.00000017 (x8.1)"
+      },
+      {
+        "side": "LONG",
+        "symbol": "YGG-USDT-SWAP",
+        "tf": "15m",
+        "ratio_4h": 1.0012,
+        "ratio_1h": 1.0021,
+        "ratio_15m_25": 1.0099,
+        "ratio_15m_45": 1.0122,
+        "j": 108.8,
+        "k": 82.2,
+        "rsi_conf": "56.0→58.6 ↑",
+        "rsi_live": "58.6→60.4 ↑",
+        "support": "0.04610 (x2.6)",
+        "resistance": "0.04720 (x3.8)"
+      },
+    ];
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Açılışta demo gösterelim
+    results = demoResults();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  "Endpoint: ${widget.settings.apiBaseUrl}",
+                  style: const TextStyle(color: Colors.white70),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: loading ? null : fetchResults,
+                icon: loading
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.refresh),
+                label: const Text("Çek"),
+              ),
+            ],
           ),
-
-          _ratioRow('4H LONG gate (EMA7/25)',
-              s.long4hMin, s.long4hMax,
-              (v) => setState(() => s.long4hMin = v),
-              (v) => setState(() => s.long4hMax = v),
+        ),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(error!, style: const TextStyle(color: Colors.orangeAccent)),
           ),
-          _ratioRow('4H SHORT gate (EMA25/7)',
-              s.short4hMin, s.short4hMax,
-              (v) => setState(() => s.short4hMin = v),
-              (v) => setState(() => s.short4hMax = v),
-          ),
-          _ratioRow('1H LONG gate (EMA7/25)',
-              s.long1hMin, s.long1hMax,
-              (v) => setState(() => s.long1hMin = v),
-              (v) => setState(() => s.long1hMax = v),
-          ),
-          _ratioRow('1H SHORT gate (EMA25/7)',
-              s.short1hMin, s.short1hMax,
-              (v) => setState(() => s.short1hMin = v),
-              (v) => setState(() => s.short1hMax = v),
-          ),
-
-          _ratioRow('15m LONG radar (EMA7/25)',
-              s.m15_7_25_Min, s.m15_7_25_Max,
-              (v) => setState(() => s.m15_7_25_Min = v),
-              (v) => setState(() => s.m15_7_25_Max = v),
-          ),
-          _ratioRow('15m SHORT radar (EMA25/7)',
-              s.m15_25_7_Min, s.m15_25_7_Max,
-              (v) => setState(() => s.m15_25_7_Min = v),
-              (v) => setState(() => s.m15_25_7_Max = v),
-          ),
-
-          _ratioRow('15m ekstra (EMA7/45)',
-              s.m15_7_45_Min, s.m15_7_45_Max,
-              (v) => setState(() => s.m15_7_45_Min = v),
-              (v) => setState(() => s.m15_7_45_Max = v),
-          ),
-          _ratioRow('15m ekstra (EMA45/7)',
-              s.m15_45_7_Min, s.m15_45_7_Max,
-              (v) => setState(() => s.m15_45_7_Min = v),
-              (v) => setState(() => s.m15_45_7_Max = v),
-          ),
-
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: _save,
-            icon: const Icon(Icons.save),
-            label: const Text('Kaydet'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () async {
-              final d = BotSettings.defaults();
-              setState(() => s = d);
-              await BotSettings.saveToPrefs(d);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Varsayılanlara döndü')),
+        const SizedBox(height: 6),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: results.length,
+            itemBuilder: (ctx, i) {
+              final r = results[i];
+              final side = (r["side"] ?? "—").toString();
+              final symbol = (r["symbol"] ?? "—").toString();
+              final tf = (r["tf"] ?? "—").toString();
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("$side • $symbol • $tf", style: const TextStyle(fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 6),
+                      Text("4H ratio: ${r["ratio_4h"]}   | 1H ratio: ${r["ratio_1h"]}"),
+                      Text("15m EMA25: ${r["ratio_15m_25"]}   | 15m EMA45: ${r["ratio_15m_45"]}"),
+                      const SizedBox(height: 6),
+                      Text("KDJ J:${r["j"]}  K:${r["k"]}"),
+                      Text("RSI CONF: ${r["rsi_conf"]}  | LIVE: ${r["rsi_live"]}"),
+                      const SizedBox(height: 6),
+                      Text("🧱 Destek: ${r["support"]}"),
+                      Text("🧱 Direnç: ${r["resistance"]}"),
+                    ],
+                  ),
+                ),
               );
             },
-            child: const Text('Varsayılanlara dön'),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class ResultsPage extends StatefulWidget {
-  const ResultsPage({super.key});
-
-  @override
-  State<ResultsPage> createState() => _ResultsPageState();
-}
-
-class _ResultsPageState extends State<ResultsPage> {
-  final List<String> logs = [];
-  Timer? t;
-
-  @override
-  void initState() {
-    super.initState();
-    // Şimdilik demo: sonuç akışı gibi gösteriyoruz.
-    // Sonraki adımda bunu senin python tarayıcıdan gelecek data ile besleyeceğiz.
-    t = Timer.periodic(const Duration(seconds: 3), (_) {
-      setState(() {
-        final now = DateTime.now().toIso8601String().substring(11, 19);
-        logs.insert(0, "[$now] Bekleniyor… (scanner bağlanınca burası dolacak)");
-        if (logs.length > 200) logs.removeLast();
-      });
-    });
-  }
-
-  @override
-  void dispose() {
-    t?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sonuçlar'),
-        actions: [
-          IconButton(
-            onPressed: () => setState(() => logs.clear()),
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Temizle',
-          )
-        ],
-      ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(12),
-        itemCount: logs.length,
-        separatorBuilder: (_, __) => const Divider(height: 8),
-        itemBuilder: (context, i) => Text(logs[i]),
-      ),
-    );
-  }
-}        actions: [
-          IconButton(
-            onPressed: () => setState(() => logs.clear()),
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Temizle',
-          )
-        ],
-      ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(12),
-        itemCount: logs.length,
-        separatorBuilder: (_, __) => const Divider(height: 8),
-        itemBuilder: (context, i) => Text(logs[i]),
-      ),
+        ),
+      ],
     );
   }
 }
