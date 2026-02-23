@@ -1,29 +1,23 @@
-name: Build Android APK
+name: polepositionsignal
+description: EMA Cross + Orderbook + Liquidity Radar Scanner
+publish_to: 'none'
 
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
+version: 1.0.0+1
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+environment:
+  sdk: ">=3.0.0 <4.0.0"
 
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.22.0"
-          channel: "stable"
+dependencies:
+  flutter:
+    sdk: flutter
 
-      - name: Flutter Pub Get
-        run: flutter pub get
+  cupertino_icons: ^1.0.6
 
-      - name: Build APK
-        run: flutter build apk --release
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
